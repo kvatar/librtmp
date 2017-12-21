@@ -1,0 +1,4 @@
+	g++ recv_t.cpp ./src/amf_librtmp.h ./src/amf_librtmp.c ./src/basic.h\
+    ./src/message.h ./src/message.cpp ./src/PriorityBlockingQueue.h ./src/log.h ./src/log.cpp\
+	./src/sendengine.h ./src/sendengine.cpp  -o recv_t -g -std=c++11 \
+	-I./src/muduo/include -L./src/muduo/lib -lmuduo_net -lmuduo_base -lpthread
