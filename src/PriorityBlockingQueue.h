@@ -18,17 +18,17 @@ public:
     PriorityBlockingQueue(int maxsz = -1) 
         : _maxSize(maxsz), 
           _mutex(),
-          _notEmpty(),
-          _notFull() {}
+          _notEmpty(_mutex),
+          _notFull(_mutex) {}
     
     void push(const T& x)
     {
         MutexLockGuard lock(_mutex);
-        while (_queue.full())
+        while (_queue.size() == _maxSize)
         {
             _notFull.wait();
         }
-        assert(!_queue.full());
+        assert(!(_queue.size() == _maxSize));
         _queue.push(x);
         _notEmpty.notify();
     }

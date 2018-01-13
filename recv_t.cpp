@@ -12,12 +12,15 @@
 #include <sys/times.h>
 #include "./src/amf_librtmp.h"   
 #include "./src/sendengine.h"
+#include "./src/log.h"
+
 
 #define MAX_CHUNK_HEADER 18
 #define CHUNK_TYPE_LARGE 0
 
 static char *ip = "10.20.6.90";
 
+using namespace RTMP;
 //usr for connect
 #define SAVC(x)	static const AVal av_##x = AVC(#x)
 #define AVC2(str)	{str,str == NULL ? 0 : strlen(str)}
@@ -141,8 +144,38 @@ uint32_t _RTMP_GetTime()
   return times(&t) * 1000 / clk_tck;
 }
 
-int main()
+
+int _ReadN(int sockfd, std::string buffer, int n)
 {
+    if(buffer.length() < n)
+    {
+        LOG_ERROR << "ReadN Size Overflow";
+        return 0;
+    }
+	char *ptr = const_cast<char *>(buffer.c_str());
+	while (n > 0)
+	{
+		int nBytes;
+		nBytes = recv(sockfd, ptr, n, 0);
+		if (nBytes < 0)
+		{
+            LOG_WARN << "send return < 0";
+			break;
+		}
+		if (nBytes == 0)
+			break;
+
+		n -= nBytes;
+		ptr += nBytes;
+    }
+
+	return n == 0;
+}
+
+int main(int argc, char* argv[])
+{
+    RTMP::LogInit(argv[0]);
+
 	int sockfd = getsocket();
 	printf("sockfd connect success : fd = %d\n",sockfd);
 	
@@ -168,7 +201,7 @@ int main()
 		free(sendbuff);
 		printf("handshake success\n");
 	}
-	
+	LOG_INFO << "connect complete";
 	
 	//connect
 	{
@@ -220,35 +253,18 @@ int main()
 		*p++ = AMF_OBJECT_END;
 		//协议下面还有个“可选的用户变量”。不知道有什么用
 		
+		std::shared_ptr<Message> msg(new Message(3,20,0,std::string(ptr,p - ptr),0,"connect"));
+	    SendEngine SEngine(sockfd);
+        SEngine.BeginThread();
+        SEngine.SendMessage(msg);
+
+        std::string recvbuff;
+        recvbuff.resize(1024);
+
+		_ReadN(sockfd,recvbuff,16);
+
+
 		
-		RTMP::Buffer bd;
-		bd.begin.reset(ptr);
-		bd.length = p - ptr;
-		
-		std::shared_ptr<Message> msg(new Message(3,20,0,bd,0));
-		
-		RTMP::SendChunkTool tool(3,sockfd);
-		tool.AddMessage(msg);
-		tool.Send();
-		tool.Send();
-		char recvbuff[1024];
-		recv(sockfd,recvbuff,1024,0);
-		
-		/////////////////////////////////////////
-		
-		
-		
-		//int GetChunkHeader(char *ptr,int csid,int timestamp,int bodysz,uint8_t msgtypeid,int msgstreamid)
-		
-		// int len = p - ptr;
-		// char *pheader = (char *)malloc(12);
-		// int hlen = GetChunkHeader(pheader,3,0,len,20,0);
-		// send(sockfd,pheader,hlen,0);
-		// send(sockfd,ptr,len,0);
-		// printf("commend connect success\n");
-		// char recvbuff[1024];
-		// memset(recvbuff,0,1024);
-		// recv(sockfd,recvbuff,1024,0);
 	}
 	
 	
