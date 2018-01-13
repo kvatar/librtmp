@@ -15,24 +15,24 @@ class RecvEngine
 public:
     struct ChunkStream
     {
-        std::shared_ptr<Message>    _lastMsg;
+        Message::Header             _lastHeader;
         Timestamp                   _lastTime;
-        int                         _lastFmt;
-        int                         _readSz;
+        bool                        _is;
+        std::string                 _readBody;
     };
 public:
     RecvEngine(int sockfd);
     std::shared_ptr<message> RecvMessage();
 
 private:
-    bool RecvOneChunk();
+   bool RecvOneChunk();
 
 private:
     std::queue<shared_ptr<Message>> _ResQueue;
     std::vector<ChunkStream>        _ChunkStreamVector;
     int                             _chunkSize;
     int                             _sockfd;
-
+    bool                            _isFirstChunk;
 };
 
 }
