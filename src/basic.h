@@ -64,7 +64,7 @@ int DecodeInt32(Iterator it)
 
 bool WriteN(int sockfd, const char * buffer, int n)
 {
-	const char *ptr = buffer.c_str();
+	const char *ptr = buffer;
 	while (n > 0)
 	{
 		int nBytes;

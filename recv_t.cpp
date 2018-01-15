@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
 		
 		std::shared_ptr<Message> msg(new Message(3,20,0,std::string(ptr,p - ptr),0,"connect"));
 	    SendEngine SEngine(sockfd);
-        SEngine.BeginThread();
+        //SEngine.BeginThread();
         SEngine.SendMessage(msg);
 
         std::string recvbuff;

@@ -69,7 +69,7 @@ bool RTMP::SendEngine::SendOneChunk(std::shared_ptr<Message> &msg)
 {
     int csid = msg->_csid;
     std::shared_ptr<Message> &_lastMsg = _ChunkStreamVector[csid]._lastMsg;
-    Timestamp &_lastTime = _ChunkStreamVector[csid]._lastTime;
+    Timestamp &_lastTime = _lastMsg->_header._timestamp;
     using std::string;
     string mm;
     mm.resize(MAX_CHUNK_HEAD_SIZE + _chunkSize);
@@ -83,10 +83,9 @@ bool RTMP::SendEngine::SendOneChunk(std::shared_ptr<Message> &msg)
         fmt++;
         if(msg->_header._payloadlength == _lastMsg->_header._payloadlength
             && msg->_header._typeid == _lastMsg->_header._typeid)
-    {
+        {
             fmt++;
-            if((msg->_header._timestamp == _lastMsg->_header._timestamp)
-                || (_lastTime == (msg->_header._timestamp + 0xffffff - _lastMsg->_header._timestamp)%0xffffff))
+            if(msg->_header._timestamp == _lastMsg->_header._timestamp)   //don't support Timestamp delta equal 
                 fmt++;
         }
     }
@@ -121,28 +120,17 @@ bool RTMP::SendEngine::SendOneChunk(std::shared_ptr<Message> &msg)
             *cur++ = tmp >> 8;
     }
     //设置Message Header
+    
+    Timestamp tm = fmt == 0 ? msg->_header._timestamp : (msg->_header._timestamp - _lastTime);      //fix to a circulatory Timestamp
     if(fmt < 3)
     {
-        if(msg->_header._timestamp > 0xffffff)
+        if(tm >= 0xffffff)
         {
             Exist_Extended_Time = true;
-            _lastTime = 0xffffff;
-            cur = EncodeingInt24(cur,mm.end(),_lastTime);
+            cur = EncodeingInt24(cur,mm.end(),0xffffff);
         }
         else
-        {
-            if(fmt == 0)
-            {
-                _lastTime = msg->_header._timestamp;
-                cur = EncodeingInt24(cur,mm.end(),_lastTime);
-            }
-            else
-            {
-                _lastTime = ((msg->_header._timestamp + 0xffffff - _lastMsg->_header._timestamp) % 0xffffff);
-                cur = EncodeingInt24(cur,mm.end(),_lastTime);
-            }
-
-        }
+            cur = EncodeingInt24(cur,mm.end(),tm);
     }
     if(fmt < 2)
     {
@@ -150,19 +138,15 @@ bool RTMP::SendEngine::SendOneChunk(std::shared_ptr<Message> &msg)
         *cur++ = msg->_header._typeid;
     }
     if(fmt < 1)
-    {
         cur = EncodeingInt32(cur,mm.end(),msg->_header._streamid);
-    }
     if(_lastMsg && Exist_Extended_Time == true)
-    {
-        cur = EncodeingInt32(cur,mm.end(),msg->_header._timestamp);
-    }
+        cur = EncodeingInt32(cur,mm.end(),tm);
 
     _lastMsg = msg;
 
     bool sendover = false;
     //body部分
-    int _sendSz = _ChunkStreamVector[csid]._sendSz;
+    uint32_t &_sendSz = _ChunkStreamVector[csid]._sendSz;
     string::iterator bbegin = msg->_body.begin() + _sendSz;//
     int bodylen = msg->_body.length() - _sendSz;
     if(bodylen > _chunkSize)

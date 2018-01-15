@@ -15,7 +15,6 @@ public:
     struct ChunkStream			//负责一个chunk stream 的发送
     {
         std::shared_ptr<Message>    _lastMsg;
-        Timestamp                   _lastTime;
         uint32_t                    _sendSz;
     };
 
