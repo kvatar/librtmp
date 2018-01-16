@@ -7,7 +7,6 @@
 #include <muduo/base/Thread.h>
 namespace RTMP{
 
-#define DEFAULT_SEND_CHUNK_SIZE		128
 
 class SendEngine			//发送引擎
 {
@@ -43,7 +42,12 @@ public:
         }      
     };
 public:
-	SendEngine(int sockfd,int chunksz = DEFAULT_SEND_CHUNK_SIZE);
+	SendEngine(int sockfd);
+    SendEngine(const SendEngine &) = delete;
+    SendEngine(SendEngine &&) = delete;
+    SendEngine &operator=(const SendEngine &) = delete;
+    SendEngine &operator=(SendEngine &&) = delete;
+    ~SendEngine() = default;
 	//~SendEngine();
 	void SendMessage(std::shared_ptr<Message> msg);	//别的线程调用的函数，应加个队列
     void BeginThread();
@@ -51,7 +55,7 @@ private:
 	void ThreadFun();
 
     void SendMessageSimple(std::shared_ptr<Message> &msg);
-    void AddMessageToQueue(std::shared_ptr<Message> &msg);
+    void SendMessageByThread(std::shared_ptr<Message> &msg);
     bool SendOneChunk(std::shared_ptr<Message> &msg);
 private:
     PriorityBlockingQueue<std::shared_ptr<Message>,CompareForMessage> _messageQueue;

@@ -7,11 +7,11 @@
 #include <algorithm>
 using namespace RTMP;
 
-namespace RTMP{
+#define DEFAULT_SEND_CHUNK_SIZE		128
 
-
-RTMP::SendEngine::SendEngine(int sockfd,int chunksz)
-	: _sockfd(sockfd),_chunkSize(chunksz),_timeForSend(0),_beginThread(false),
+RTMP::SendEngine::SendEngine(int sockfd)
+	: _sockfd(sockfd),_timeForSend(0),_beginThread(false),
+    _chunkSize(DEFAULT_SEND_CHUNK_SIZE),
     _sendEngineThread(std::bind(&RTMP::SendEngine::ThreadFun,this),"SendEngineThread")
 {
 	_ChunkStreamVector.resize(10);
@@ -22,7 +22,7 @@ void RTMP::SendEngine::SendMessage(std::shared_ptr<Message> msg)
 {
     LOG_INFO << "Name:" << msg->GetName() << " beginSend ";
     if(_beginThread)
-        AddMessageToQueue(msg);
+        SendMessageByThread(msg);
     else
         SendMessageSimple(msg);
 }
@@ -32,7 +32,7 @@ void RTMP::SendEngine::BeginThread()
     _sendEngineThread.start();
 }
 
-void RTMP::SendEngine::AddMessageToQueue(std::shared_ptr<Message> &msg)
+void RTMP::SendEngine::SendMessageByThread(std::shared_ptr<Message> &msg)
 {
     msg->_timeSend = _timeForSend++;
     LOG_INFO << "Name:" << msg->GetName() << " add in queue " << "Get ID:" << msg->_timeSend;
@@ -177,7 +177,6 @@ bool RTMP::SendEngine::SendOneChunk(std::shared_ptr<Message> &msg)
 
 
 
-}
 
 
 

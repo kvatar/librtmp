@@ -1,30 +1,68 @@
-#include <string>
 #include "recvengine.h"
 #include "log.h"
 #include "basic.h"
+using namespace std;
 
+using namespace RTMP;
 
-RTMP::RecvEngine::RecvEngine(int sockfd)
-    :_chunkSize(DEFAULT_RECV_CHUNK_SIZE),_sockfd(sockfd)
+#define DEFAULT_RECV_CHUNK_SIZE		128
+
+RTMP::RecvEngine::RecvEngine(int sockfd,int queueMaxSZ)
+    :_chunkSize(DEFAULT_RECV_CHUNK_SIZE),_sockfd(sockfd),
+    _beginThread(false),_ResQueue(queueMaxSZ),
+    _recvEngineThread(std::bind(&RTMP::RecvEngine::ThreadFun,this),"RecvEngineThread") 
 {
     _ChunkStreamVector.resize(10);
     LOG_INFO << "RecvEngine init over";
 }
 
-std::shared_ptr<message> RTMP::RecvEngine::RecvMessage()
+std::shared_ptr<Message> RTMP::RecvEngine::RecvMessage()
 {
-    
+    if(_beginThread)
+        return RecvMessageByThread();
+    else
+        return RecvMessageSimple();
+}
+
+void RTMP::RecvEngine::BeginThread()
+{
+    _beginThread = true;
+    _recvEngineThread.start();
+}
+
+std::shared_ptr<Message> RTMP::RecvEngine::RecvMessageSimple()
+{
+    std::shared_ptr<Message> msg;
+    while(!(msg = RecvOneChunk()));
+    return msg;
+}
+
+std::shared_ptr<Message> RTMP::RecvEngine::RecvMessageByThread()
+{
+    return _ResQueue.take();
+}
+
+void RTMP::RecvEngine::ThreadFun()
+{
+    while(1)
+    {
+        std::shared_ptr<Message> msg;
+        while(!(msg = RecvOneChunk()));
+        _ResQueue.put(msg);
+    }
 }
 
 
-bool RTMP::RecvEngine::RecvOneChunk()
+
+std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
 {
-    std::string mm;
-    char *buffer = const_cast<char *>(mm.c_str());
+    std::vector<char> mm;
     mm.resize(MAX_CHUNK_HEAD_SIZE + _chunkSize);
+    char *buffer = &*mm.begin();
     ReadN(_sockfd,buffer,1);
     int fmt = (buffer[0] & 0xc0) >> 6;
     int csid = (buffer[0] & 0x3f);
+    
     if(csid == 0)
     {
         ReadN(_sockfd,buffer,1);
@@ -38,117 +76,96 @@ bool RTMP::RecvEngine::RecvOneChunk()
         csid = tmp + 64;
     }
 
-
-    Message::Header &_lastHeader = _ChunkStreamVector[csid]._lastHeader;
-    Timestamp _lastTime = _ChunkStreamVector[csid]._lastTime;
-    int _lastFmt = _ChunkStreamVector[csid]._lastFmt;
-    
-
-    Message::Header msgHeader;
-    
-    if(_isFirstChunk && fmt != 0)
+    switch(fmt)
     {
-        LOG_WARN << "fmt != 0 && _isFirstChunk";
-        return false;
+    case 0:
+         ReadN(_sockfd,buffer,11);
+         break;
+    case 1:
+         ReadN(_sockfd,buffer,7);
+         break;
+    case 2:
+         ReadN(_sockfd,buffer,3);
+         break;
+    case 3:
+         break;
     }
     
-
-    bool Exist_Extended_Time = false;
-    Timestamp tm = 0;
-
-    if(fmt == 0)
+    std::shared_ptr<Message> &_lastMsg = _ChunkStreamVector[csid]._lastMsg;
+    Timestamp &_lastChunkTime = _ChunkStreamVector[csid]._lastChunkTime;
+    Timestamp &_lastMessageTime = _ChunkStreamVector[csid]._lastMessageTime;
+    bool &_isAbsOfLastChunkTime = _ChunkStreamVector[csid]._isAbsOfLastChunkTime;
+    uint32_t &_readSz = _ChunkStreamVector[csid]._readSz;
+    if(!_lastMsg)
     {
-        ReadN(_sockfd,buffer,11);
-        std::string::iterator it = buffer.begin();
-        tm = DecodeInt24(it);
-        it += 3;
-        if(tm == 0xffffff)
-            Exist_Extended_Time = true;
-        else
-            msgHeader._timestamp = tm;
-        
-        msgHeader._payloadlength = DecodeInt24(it);
-        it += 3;
-
-        msgHeader._typeid = *it;
-        ++it;
-
-        msgHeader._streamid = DecodeInt32(it);
-    }
-    else if(fmt == 1)
-    {
-        ReadN(_sockfd,buffer,7);
-        std::string::iterator it = buffer.begin();
-        tm = DecodeInt24(it);
-        it += 3;
-        if(tm == 0xffffff)
-            Exist_Extended_Time = true;
-        else
-            msgHeader._timestamp = (tm + _lastHeader._timestamp) % 0xffffff;
-        
-        msgHeader._payloadlength = DecodeInt24(it);
-        it += 3;
-
-        msgHeader._typeid = *it;
-
-        msgHeader._streamid = _lastHeader._streamid;
-    }
-    else if(fmt == 2)
-    {
-        ReadN(_sockfd,buffer,3); 
-        std::string::iterator it = buffer.begin();
-        tm = DecodeInt24(it);
-        it += 3;
-        if(tm == 0xffffff)
-            Exist_Extended_Time = true;
-        else
-            msgHeader._timestamp = (tm + _lastHeader._timestamp) % 0xffffff;
-        
-        msgHeader._payloadlength = _lastHeader._payloadlength;
-
-        msgHeader._typeid = _lastHeader._typeid;
-
-        msgHeader._streamid = _lastHeader._streamid;
-    }
-    else if(fmt == 3)
-    {
-        tm = _lastTime;
-        if(tm == 0xffffff)
-            Exist_Extended_Time = true;
-        else
+        if(fmt != 0)
         {
-            if(_lastFmt == 0)
-                msgHeader._timestamp = tm;
-            else
-                msgHeader._timestamp = (tm + _lastHeader._timestamp) % 0xffffff;
+            LOG_ERROR << "first chunk fmt != 0";
+            return false;
         }
-        msgHeader._payloadlength = _lastHeader._payloadlength;
-
-        msgHeader._typeid = _lastHeader._typeid;
-
-        msgHeader._streamid = _lastHeader._streamid;
-    
+        _lastMsg.reset(new Message);
+        _lastMsg->_csid = csid;
     }
     else
+        assert(_lastMsg->_csid == csid);
+    bool isAbsTimestamp = (fmt == 0) || (fmt == 3 && _isAbsOfLastChunkTime);
+    bool Exist_Extended_Time = false;
+    bool isFirstChunkOfMessage = _readSz == 0;
+    std::vector<char>::iterator it = mm.begin();
+    Timestamp tm = 0;
+
+    if(fmt == 3)
+        tm = _lastChunkTime;
+    if(fmt <= 2)
     {
-        LOG_ERROR << "fmt > 3";
-        return false;
+        tm = DecodeInt24(it);
+        it += 3;
     }
-    if(Exist_Extended_Time)
+    if(fmt <= 1)
+    {
+        _lastMsg->_header._payloadlength = DecodeInt24(it);
+        it += 3;
+        _lastMsg->_header._typeid = *it;
+        ++it;
+    }
+    if(fmt == 0)
+        _lastMsg->_header._streamid = DecodeInt32(it);
+    _lastChunkTime = tm;
+    if(tm == 0xffffff)
     {
          ReadN(_sockfd,buffer,4);
-         msgHeader._timestamp = DecodeInt32(buffer);
-    } 
-    _ChunkStreamVector[csid]._lastHeader = msg;
-    _ChunkStreamVector[csid]._lastTime = tm;
-    _ChunkStreamVector[csid]._lastFmt = fmt;
+         tm = DecodeInt32(buffer);
+    }
+    if(isAbsTimestamp)
+        _lastMsg->_header._timestamp = tm;
+    else
+        _lastMsg->_header._timestamp = _lastMessageTime + tm;   //fix for circulatory Timestamp
+    _isAbsOfLastChunkTime = isAbsTimestamp;
 
-    msg->_body.resize(msg->_header._payloadlength);
+    if(isFirstChunkOfMessage)
+        _lastMsg->_body.reserve(_lastMsg->_header._payloadlength);
 
-    int remain = _lastMsg->_payloadlength - _readSz;
-    int sz = _readSz < _chunkSize ? _readSz : _chunkSize;
-    ReadN(_sockfd,const_cast<char *>(msg->_body.c_str()),msg->_header._payloadlength);
+    std::string::iterator bbegin = _lastMsg->_body.begin() + _readSz;
+    int bodylen = _lastMsg->_header._payloadlength - _readSz;
+    int rdsz = bodylen < _chunkSize ? bodylen : _chunkSize;
+    bool isover = (bodylen <= _chunkSize);
+    std::vector<char> bodybuff;      //fix to no copy
+    bodybuff.resize(rdsz);
+    ReadN(_sockfd,&*bodybuff.begin(),rdsz);
+    std::copy(bodybuff.begin(),bodybuff.begin() + rdsz,back_inserter(_lastMsg->_body));
+    _readSz += rdsz;
 
+    if(isover)
+    {
+        _readSz = 0;
+        _lastMessageTime = _lastMsg->_header._timestamp;
+    }
+    LOG_INFO << "RecvOneChunk : " << rdsz << "bytes,isover:" << isover;
+    
+    if(isover)
+        return std::shared_ptr<Message>(new Message(std::move(*_lastMsg)));//fix to provide special construction to only move body
+    else
+        return std::shared_ptr<Message>(new Message) ;
 }
 
 

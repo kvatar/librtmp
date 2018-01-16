@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>    
@@ -12,6 +13,7 @@
 #include <sys/times.h>
 #include "./src/amf_librtmp.h"   
 #include "./src/sendengine.h"
+#include "./src/recvengine.h"
 #include "./src/log.h"
 
 
@@ -255,15 +257,13 @@ int main(int argc, char* argv[])
 		
 		std::shared_ptr<Message> msg(new Message(3,20,0,std::string(ptr,p - ptr),0,"connect"));
 	    SendEngine SEngine(sockfd);
-        //SEngine.BeginThread();
+	    RecvEngine REngine(sockfd);
+        SEngine.BeginThread();
         SEngine.SendMessage(msg);
-
-        std::string recvbuff;
-        recvbuff.resize(1024);
-
-		_ReadN(sockfd,recvbuff,16);
-
-
+        msg = REngine.RecvMessage();
+        msg->show();
+        msg = REngine.RecvMessage();
+        msg->show();
 		
 	}
 	
