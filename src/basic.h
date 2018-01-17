@@ -44,23 +44,9 @@ Iterator EncodeingInt32(Iterator output, Iterator outend, int nVal)
 	return output + 4;
 }
 
-template <typename Iterator>
-int DecodeInt24(Iterator it)
-{
-    Iterator c = it;
-    int val;
-    val = (c[0] << 16) | (c[1] << 8) | c[2];
-    return val;
-}
+unsigned int DecodeInt24(char * it);
 
-template <typename Iterator>
-int DecodeInt32(Iterator it)
-{
-    Iterator c = it;
-    int val;
-    val = (c[0] << 24) | (c[1] << 16) | (c[2] << 8) | c[3];
-    return val;
-}
+unsigned int DecodeInt32(char * it);
 
 bool WriteN(int sockfd, const char * buffer, int n);
 

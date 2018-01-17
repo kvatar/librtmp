@@ -33,7 +33,11 @@ void RTMP::RecvEngine::BeginThread()
 std::shared_ptr<Message> RTMP::RecvEngine::RecvMessageSimple()
 {
     std::shared_ptr<Message> msg;
-    while(!(msg = RecvOneChunk()));
+    while(!msg)
+    {
+        msg = RecvOneChunk();
+    }
+
     return msg;
 }
 
@@ -47,7 +51,11 @@ void RTMP::RecvEngine::ThreadFun()
     while(1)
     {
         std::shared_ptr<Message> msg;
-        while(!(msg = RecvOneChunk()));
+        while(!msg)
+        {
+            msg = RecvOneChunk();
+        }
+
         _ResQueue.put(msg);
     }
 }
@@ -60,37 +68,46 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
     mm.resize(MAX_CHUNK_HEAD_SIZE + _chunkSize);
     char *buffer = &*mm.begin();
     ReadN(_sockfd,buffer,1);
+    int headerLength = 1;
     int fmt = (buffer[0] & 0xc0) >> 6;
     int csid = (buffer[0] & 0x3f);
-    
     if(csid == 0)
     {
         ReadN(_sockfd,buffer,1);
         csid = buffer[0];
         csid += 64;
+        headerLength += 1;
     }
     else if(csid == 1)
     {
         ReadN(_sockfd,buffer,2);
         int tmp = (buffer[0] << 8) + buffer[0];
         csid = tmp + 64;
+        headerLength += 2;
     }
 
     switch(fmt)
     {
     case 0:
          ReadN(_sockfd,buffer,11);
+         headerLength += 11;
          break;
     case 1:
          ReadN(_sockfd,buffer,7);
+         headerLength += 7;
          break;
     case 2:
          ReadN(_sockfd,buffer,3);
+         headerLength += 3;
          break;
     case 3:
          break;
     }
     
+    if(csid >= _ChunkStreamVector.size())
+    {
+        _ChunkStreamVector.resize(2 * _ChunkStreamVector.size());
+    }
     std::shared_ptr<Message> &_lastMsg = _ChunkStreamVector[csid]._lastMsg;
     Timestamp &_lastChunkTime = _ChunkStreamVector[csid]._lastChunkTime;
     Timestamp &_lastMessageTime = _ChunkStreamVector[csid]._lastMessageTime;
@@ -105,15 +122,17 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
         }
         _lastMsg.reset(new Message);
         _lastMsg->_csid = csid;
+        _lastMsg->_purpose = Message::RECV;
     }
     else
         assert(_lastMsg->_csid == csid);
+
     bool isAbsTimestamp = (fmt == 0) || (fmt == 3 && _isAbsOfLastChunkTime);
     bool Exist_Extended_Time = false;
     bool isFirstChunkOfMessage = _readSz == 0;
-    std::vector<char>::iterator it = mm.begin();
+    char * it = &*mm.begin();
     Timestamp tm = 0;
-
+    _lastMsg->_fmt = fmt;
     if(fmt == 3)
         tm = _lastChunkTime;
     if(fmt <= 2)
@@ -134,6 +153,7 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
     if(tm == 0xffffff)
     {
          ReadN(_sockfd,buffer,4);
+         headerLength += 4;
          tm = DecodeInt32(buffer);
     }
     if(isAbsTimestamp)
@@ -142,6 +162,7 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
         _lastMsg->_header._timestamp = _lastMessageTime + tm;   //fix for circulatory Timestamp
     _isAbsOfLastChunkTime = isAbsTimestamp;
 
+    _lastMsg->_netHeaderLength = headerLength;
     if(isFirstChunkOfMessage)
         _lastMsg->_body.reserve(_lastMsg->_header._payloadlength);
 
@@ -165,7 +186,7 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
     if(isover)
         return std::shared_ptr<Message>(new Message(std::move(*_lastMsg)));//fix to provide special construction to only move body
     else
-        return std::shared_ptr<Message>(new Message) ;
+        return std::shared_ptr<Message>() ;
 }
 
 

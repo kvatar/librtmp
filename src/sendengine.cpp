@@ -21,6 +21,7 @@ RTMP::SendEngine::SendEngine(int sockfd)
 void RTMP::SendEngine::SendMessage(std::shared_ptr<Message> msg)
 {
     LOG_INFO << "Name:" << msg->GetName() << " beginSend ";
+    msg->_purpose = Message::SEND;
     if(_beginThread)
         SendMessageByThread(msg);
     else
@@ -35,7 +36,7 @@ void RTMP::SendEngine::BeginThread()
 void RTMP::SendEngine::SendMessageByThread(std::shared_ptr<Message> &msg)
 {
     msg->_timeSend = _timeForSend++;
-    LOG_INFO << "Name:" << msg->GetName() << " add in queue " << "Get ID:" << msg->_timeSend;
+    LOG_INFO << "Name:" << msg->GetName() << " add in sendqueue " << "Get ID:" << msg->_timeSend;
     _messageQueue.push(msg);    
 }
 

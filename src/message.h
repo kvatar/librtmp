@@ -29,7 +29,7 @@ public:
 		Timestamp	  _timestamp;
 		MessageID	  _streamid;
 	};
-	
+	enum PURPOSE {RECV,SEND,NONE};
 public:
 //数据依靠拷贝传进库，以后可以实现一个基于shared_ptr的版本接受动态开辟的指针
 	Message() {}
@@ -54,6 +54,11 @@ private:
     uint32_t        _timeSend;  //time when SendMessage, use for differentiate priority 
     std::string     _name;
     
+    //for debug
+    PURPOSE         _purpose;
+    int             _fmt;
+    uint32_t        _netHeaderLength;
+
 	friend class SendEngine;
 	friend class RecvEngine;
 };

@@ -258,12 +258,13 @@ int main(int argc, char* argv[])
 		std::shared_ptr<Message> msg(new Message(3,20,0,std::string(ptr,p - ptr),0,"connect"));
 	    SendEngine SEngine(sockfd);
 	    RecvEngine REngine(sockfd);
-        SEngine.BeginThread();
+        //SEngine.BeginThread();
         SEngine.SendMessage(msg);
-        msg = REngine.RecvMessage();
-        msg->show();
-        msg = REngine.RecvMessage();
-        msg->show();
+        while(1)
+        {
+            msg = REngine.RecvMessage();
+            msg->show();
+        }
 		
 	}
 	
