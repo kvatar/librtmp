@@ -5,17 +5,17 @@
 namespace RTMP
 {
 
-unsigned int DecodeInt24(char * it)
+unsigned int DecodeInt24(const char * it)
 {
-    unsigned char * c = reinterpret_cast<unsigned char *>(it);
+    const unsigned char * c = reinterpret_cast<const unsigned char *>(it);
     unsigned int val;
     val = (c[0] << 16) | (c[1] << 8) | c[2];
     return val;
 }
 
-unsigned int DecodeInt32(char * it)
+unsigned int DecodeInt32(const char * it)
 {
-    unsigned char * c = reinterpret_cast<unsigned char *>(it);
+    const unsigned char * c = reinterpret_cast<const unsigned char *>(it);
     unsigned int val;
     val = (c[0] << 24) | (c[1] << 16) | (c[2] << 8) | c[3];
     return val;

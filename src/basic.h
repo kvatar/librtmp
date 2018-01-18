@@ -44,9 +44,9 @@ Iterator EncodeingInt32(Iterator output, Iterator outend, int nVal)
 	return output + 4;
 }
 
-unsigned int DecodeInt24(char * it);
+unsigned int DecodeInt24(const char * it);
 
-unsigned int DecodeInt32(char * it);
+unsigned int DecodeInt32(const char * it);
 
 bool WriteN(int sockfd, const char * buffer, int n);
 

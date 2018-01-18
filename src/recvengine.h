@@ -5,8 +5,6 @@
 #include "message.h"
 #include <memory>
 #include <vector>
-#include <muduo/base/BoundedBlockingQueue.h>
-#include <muduo/base/Thread.h>
 namespace RTMP{
 
 
@@ -30,22 +28,15 @@ public:
     RecvEngine &operator=(RecvEngine &&) = delete;
     ~RecvEngine() = default;
 
+    void ModifyChunkSize(uint32_t chunksz);
     std::shared_ptr<Message> RecvMessage();
-    void BeginThread();
 private:
     std::shared_ptr<Message> RecvOneChunk();
-    std::shared_ptr<Message> RecvMessageSimple();
-    std::shared_ptr<Message> RecvMessageByThread();
-
-    void ThreadFun();
 
 private:
-    muduo::BoundedBlockingQueue<std::shared_ptr<Message>> _ResQueue;  //fix to support Multi-thread
     std::vector<ChunkStream>                        _ChunkStreamVector;
     int                                             _chunkSize;
     int                                             _sockfd;
-    muduo::Thread                                   _recvEngineThread;
-    bool                                            _beginThread;
 };
 
 }

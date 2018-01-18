@@ -1,7 +1,7 @@
 #include "recvengine.h"
 #include "log.h"
 #include "basic.h"
-using namespace std;
+#include <iostream>
 
 using namespace RTMP;
 
@@ -9,28 +9,16 @@ using namespace RTMP;
 
 RTMP::RecvEngine::RecvEngine(int sockfd,int queueMaxSZ)
     :_chunkSize(DEFAULT_RECV_CHUNK_SIZE),_sockfd(sockfd),
-    _beginThread(false),_ResQueue(queueMaxSZ),
-    _recvEngineThread(std::bind(&RTMP::RecvEngine::ThreadFun,this),"RecvEngineThread") 
 {
     _ChunkStreamVector.resize(10);
-    LOG_INFO << "RecvEngine init over";
+    std::cout << "RecvEngine init over" << std::endl;
+}
+void RTMP::RecvEngine::ModifyChunkSize(uint32_t chunksz)
+{
+    
 }
 
 std::shared_ptr<Message> RTMP::RecvEngine::RecvMessage()
-{
-    if(_beginThread)
-        return RecvMessageByThread();
-    else
-        return RecvMessageSimple();
-}
-
-void RTMP::RecvEngine::BeginThread()
-{
-    _beginThread = true;
-    _recvEngineThread.start();
-}
-
-std::shared_ptr<Message> RTMP::RecvEngine::RecvMessageSimple()
 {
     std::shared_ptr<Message> msg;
     while(!msg)
@@ -40,27 +28,6 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvMessageSimple()
 
     return msg;
 }
-
-std::shared_ptr<Message> RTMP::RecvEngine::RecvMessageByThread()
-{
-    return _ResQueue.take();
-}
-
-void RTMP::RecvEngine::ThreadFun()
-{
-    while(1)
-    {
-        std::shared_ptr<Message> msg;
-        while(!msg)
-        {
-            msg = RecvOneChunk();
-        }
-
-        _ResQueue.put(msg);
-    }
-}
-
-
 
 std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
 {
@@ -117,7 +84,7 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
     {
         if(fmt != 0)
         {
-            LOG_ERROR << "first chunk fmt != 0";
+            std::cout << "ERROR : first chunk fmt != 0" << std::endl;
             return false;
         }
         _lastMsg.reset(new Message);
@@ -180,8 +147,9 @@ std::shared_ptr<Message> RTMP::RecvEngine::RecvOneChunk()
     {
         _readSz = 0;
         _lastMessageTime = _lastMsg->_header._timestamp;
+        _lastMsg->UpdataMsgBodyTag();
     }
-    LOG_INFO << "RecvOneChunk : " << rdsz << "bytes,isover:" << isover;
+    std::cout << "RecvOneChunk : " << rdsz << "bytes,isover:" << isover << std::endl;
     
     if(isover)
         return std::shared_ptr<Message>(new Message(std::move(*_lastMsg)));//fix to provide special construction to only move body
